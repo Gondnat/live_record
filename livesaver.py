@@ -14,10 +14,8 @@ logging.basicConfig(level=logging.INFO,
                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 直播地址
-# TWITCH_URL = "https://www.twitch.tv/luoshushu0"
-# YOUTUBE_URL = "https://www.youtube.com/channel/UC7QVieoTCNwwW84G0bddXpA/live"
-TWITCH_URL = "https://www.twitch.tv/jinnytty"
-YOUTUBE_URL = "https://www.youtube.com/@sciencewillwin/live"
+TWITCH_URL = "https://www.twitch.tv/luoshushu0"
+YOUTUBE_URL = "https://www.youtube.com/channel/UC7QVieoTCNwwW84G0bddXpA/live"
 
 
 def retry_on_failure(max_retries=5, delay=2, exceptions=(Exception,)):
