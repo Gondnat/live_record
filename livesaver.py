@@ -7,15 +7,17 @@ import threading
 from datetime import datetime
 from chat_downloader import ChatDownloader
 from pathlib import Path
-import yt_dlp
+from recorder.youtube import YoutubeRecorderThread, check_youtube_live
+from recorder.twitch import TwitchRecorderThread, check_twitch_live
 
 # 设置日志
-logging.basicConfig(level=logging.INFO,
-                   format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 直播地址
 TWITCH_URL = "https://www.twitch.tv/luoshushu0"
-YOUTUBE_URL = "https://www.youtube.com/channel/UC7QVieoTCNwwW84G0bddXpA/live"
+# YOUTUBE_URL = "https://www.youtube.com/channel/UC7QVieoTCNwwW84G0bddXpA/live"
+YOUTUBE_URL = "https://www.youtube.com/channel/UCiwt1aanVMoPYUt_CQYCPQg/live"
+
 
 
 def retry_on_failure(max_retries=5, delay=2, exceptions=(Exception,)):
@@ -32,142 +34,6 @@ def retry_on_failure(max_retries=5, delay=2, exceptions=(Exception,)):
         return wrapper
     return decorator
 
-class YoutubeRecorderThread(threading.Thread):
-    def __init__(self, url, filename, download_chat=False, cookie_browsers=['chrome']):
-        super().__init__()
-        self.url = url
-        self.filename = filename
-        self.download_chat = download_chat
-        self.cookie_browsers = cookie_browsers
-        self._stop_event = threading.Event()
-        self.process = None
-        
-    def stop(self):
-        self._stop_event.set()
-        if self.process:
-            try:
-                self.process.terminate()
-            except:
-                pass
-        
-    def stopped(self):
-        return self._stop_event.is_set()
-        
-    def run(self):
-        try:
-            ydl_opts = {
-                'outtmpl': self.filename,
-                # 'live_from_start': True,
-                'quiet': True,
-                'no_warnings': True,
-                'cookiesfrombrowser': self.cookie_browsers,
-                'nopart':True,
-            }
-            if self.download_chat:
-                ydl_opts = {**ydl_opts, ** {'subtitleslangs': ['live_chat'],'writesubtitles': True,}}
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                self.process = ydl.download([self.url])
-                
-        except Exception as e:
-            if self.download_chat:
-                logging.error(f"YouTube实时聊天下载失败:{str(e)}")
-            else:
-                logging.error(f"YouTube视频录制失败: {str(e)}")
-        finally:
-            if self.process:
-                try:
-                    self.process.terminate()
-                except:
-                    pass
-
-
-class TwitchRecorderThread(threading.Thread):
-    def __init__(self, url, filename, quality='best'):
-        super().__init__()
-        self.url = url
-        self.filename = filename
-        self.quality = quality
-        self._stop_event = threading.Event()
-        self.stream_fd = None
-        self.output_fd = None
-        
-    def stop(self):
-        self._stop_event.set()
-        if self.stream_fd:
-            try:
-                self.stream_fd.close()
-            except:
-                pass
-        if self.output_fd:
-            try:
-                self.output_fd.close()
-            except:
-                pass
-        
-    def stopped(self):
-        return self._stop_event.is_set()
-        
-    def run(self):
-        try:
-            streams = streamlink.streams(self.url)
-            if not streams:
-                logging.error(f"无法获取Twitch直播流: {self.url}")
-                return
-                
-            stream = streams[self.quality]
-            Path(self.filename).parent.mkdir(parents=True, exist_ok=True)
-            
-            self.stream_fd = stream.open()
-            self.output_fd = open(self.filename, 'wb')
-            
-            while not self.stopped():
-                try:
-                    data = self.stream_fd.read(1024*1024)
-                    if not data:
-                        break
-                    self.output_fd.write(data)
-                except Exception as e:
-                    logging.error(f"Twitch录制过程中出错: {str(e)}")
-                    break
-                    
-        except Exception as e:
-            logging.error(f"Twitch视频录制失败: {str(e)}")
-        finally:
-            if self.stream_fd:
-                try:
-                    self.stream_fd.close()
-                except:
-                    pass
-            if self.output_fd:
-                try:
-                    self.output_fd.close()
-                except:
-                    pass
-
-def check_youtube_live(url, cookie_browsers=['chrome']):
-    """检查YouTube直播状态"""
-    try:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'cookiesfrombrowser': cookie_browsers,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            return info.get('is_live', False)
-    except:
-        return False
-
-def check_twitch_live(url):
-    """检查Twitch直播状态"""
-    try:
-        streams = streamlink.streams(url)
-        return len(streams) > 0
-    except:
-        return False
-
-@retry_on_failure(max_retries=3, delay=0.1)
 class ChatDownloaderThread(threading.Thread):
     def __init__(self, url, filename):
         super().__init__()
@@ -182,6 +48,7 @@ class ChatDownloaderThread(threading.Thread):
     def stopped(self):
         return self._stop_event.is_set()
 
+    @retry_on_failure(max_retries=3, delay=0.1)
     def run(self):
         try:
             # 确保输出目录存在
