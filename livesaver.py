@@ -7,6 +7,9 @@ import threading
 from datetime import datetime
 from chat_downloader import ChatDownloader
 from pathlib import Path
+
+import streamlink.stream
+from cookies import load_cookies
 from recorder.youtube import YoutubeRecorderThread, check_youtube_live
 from recorder.twitch import TwitchRecorderThread, check_twitch_live
 
@@ -32,12 +35,15 @@ def retry_on_failure(max_retries=5, delay=2, exceptions=(Exception,)):
     return decorator
 
 class ChatDownloaderThread(threading.Thread):
-    def __init__(self, url, filename):
+    def __init__(self, url, filename, cookie=None):
         super().__init__()
         self.url = url
         self.filename = filename
         self._stop_event = threading.Event()
-        self.chat_downloader = ChatDownloader()
+        if cookie:
+            self.chat_downloader = ChatDownloader(cookies=';'.join([f"{k}={v}" for k, v in cookie.items()]) if isinstance(cookie, dict) else cookie)
+        else:
+            self.chat_downloader = ChatDownloader()
 
     def stop(self):
         self._stop_event.set()
@@ -52,6 +58,7 @@ class ChatDownloaderThread(threading.Thread):
             Path(self.filename).parent.mkdir(parents=True, exist_ok=True)
             
             chat = self.chat_downloader.get_chat(self.url)
+            logging.info(f"开始下载聊天记录到 {self.filename}")
             with open(self.filename, 'w', encoding='utf-8') as f:
                 for message in chat:
                     if self.stopped():
@@ -66,6 +73,7 @@ class ChatDownloaderThread(threading.Thread):
                     except Exception as e:
                         logging.error(f"处理消息时出错: {str(e)}")
                         continue
+            logging.info(f"聊天记录下载完成: {self.filename}")
         except Exception as e:
             logging.error(f"聊天下载失败: {str(e)}")
             raise e
@@ -76,14 +84,22 @@ def main():
     youtube_chat_thread = None
     twitch_chat_thread = None
     
-    output_dir = Path("recordings")
+    output_dir = Path(f"recordings"/{datetime.now().strftime("%Y%m%d")})
     output_dir.mkdir(exist_ok=True)
-    
+    cookies = load_cookies(None, ['safari'])
+    youtube_cookies_dict = cookies.get_cookies_dict_for_url(YOUTUBE_URL)
+    if not youtube_cookies_dict:
+        logging.error("请先登录YouTube")
+        return
+    youtube_cookies_file = 'youtube_cookies.txt'
+    cookies.save(youtube_cookies_file)
+
     try:
         while True:
             try:
+                                
                 twitch_live = check_twitch_live(TWITCH_URL)
-                youtube_live = check_youtube_live(YOUTUBE_URL)
+                youtube_live = check_twitch_live(YOUTUBE_URL, youtube_cookies_dict)
                 
                 # Twitch开播时
                 if twitch_live and not twitch_video_thread:
@@ -111,13 +127,13 @@ def main():
                 # YouTube开播且Twitch未开播时
                 elif youtube_live and not youtube_video_thread and not twitch_live:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    video_filename = output_dir / f"youtube_{timestamp}.%(ext)s"
-                    chat_filename = output_dir / f"youtube_{timestamp}.%(ext)s"
+                    video_filename = output_dir / f"youtube_{timestamp}.ts"
+                    chat_filename = output_dir / f"youtube_{timestamp}.json"
                     
                     logging.info("YouTube开播，开始录制视频和聊天")
-                    youtube_video_thread = YoutubeRecorderThread(YOUTUBE_URL, str(video_filename))
+                    youtube_video_thread = TwitchRecorderThread(YOUTUBE_URL, str(video_filename), youtube_cookies_dict)
                     youtube_video_thread.start()
-                    youtube_chat_thread = YoutubeRecorderThread(YOUTUBE_URL, str(chat_filename), True)
+                    youtube_chat_thread = ChatDownloaderThread(YOUTUBE_URL, str(chat_filename), youtube_cookies_file)
                     youtube_chat_thread.start()
                 
                 # Twitch关播时

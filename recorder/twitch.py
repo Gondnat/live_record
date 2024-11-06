@@ -2,20 +2,28 @@ import logging
 from pathlib import Path
 import threading
 import streamlink
+import streamlink.session
 
-def check_twitch_live(url):
+def check_twitch_live(url, cookie = None):
     """检查Twitch直播状态"""
     try:
-        streams = streamlink.streams(url)
+        if cookie:
+            streamlinklocal = streamlink.session.Streamlink()
+            streamlinklocal.set_option('http-cookies', cookie)
+            streams = streamlinklocal.streams(url)
+        else:
+            streams = streamlink.streams(url)
         return len(streams) > 0
-    except:
+    except Exception as e:
+        logging.error(f"检查直播状态失败: {str(e)}")
         return False
 
 class TwitchRecorderThread(threading.Thread):
-    def __init__(self, url, filename, quality='best'):
+    def __init__(self, url, filename, cookie = None, quality='best'):
         super().__init__()
         self.url = url
         self.filename = filename
+        self.cookie = cookie
         self.quality = quality
         self._stop_event = threading.Event()
         self.stream_fd = None
@@ -39,9 +47,14 @@ class TwitchRecorderThread(threading.Thread):
         
     def run(self):
         try:
-            streams = streamlink.streams(self.url)
+            if self.cookie:
+                streamlinklocal = streamlink.session.Streamlink()
+                streamlinklocal.set_option('http-cookies', self.cookie)
+                streams = streamlinklocal.streams(self.url)
+            else:
+                streams = streamlink.streams(self.url)
             if not streams:
-                logging.error(f"无法获取Twitch直播流: {self.url}")
+                logging.error(f"无法获取直播流: {self.url}")
                 return
                 
             stream = streams[self.quality]
@@ -49,7 +62,7 @@ class TwitchRecorderThread(threading.Thread):
             
             self.stream_fd = stream.open()
             self.output_fd = open(self.filename, 'wb')
-            
+            logging.info(f"开始录制视频到文件 {self.filename}")
             while not self.stopped():
                 try:
                     data = self.stream_fd.read(1024*1024)
@@ -59,9 +72,9 @@ class TwitchRecorderThread(threading.Thread):
                 except Exception as e:
                     logging.error(f"Twitch录制过程中出错: {str(e)}")
                     break
-                    
+            logging.info(f"录制结束: {self.filename}")
         except Exception as e:
-            logging.error(f"Twitch视频录制失败: {str(e)}")
+            logging.error(f"视频录制失败: {str(e)}")
         finally:
             if self.stream_fd:
                 try:

@@ -4,7 +4,7 @@ import threading
 import yt_dlp
 
 class YoutubeRecorderThread(threading.Thread):
-    def __init__(self, url, filename, download_chat=False, cookie_browsers=['chrome']):
+    def __init__(self, url, filename, download_chat=False, cookie_browsers=['chrome']) :
         super().__init__()
         self.url = url
         self.filename = filename
@@ -18,7 +18,7 @@ class YoutubeRecorderThread(threading.Thread):
         if self.process:
             try:
                 self.process.terminate()
-            except:
+            except Exception:
                 pass
         
     def stopped(self):
@@ -31,14 +31,16 @@ class YoutubeRecorderThread(threading.Thread):
 
             ydl_opts = {
                 'outtmpl': self.filename,
-                # 'live_from_start': True,
                 'quiet': True,
                 'no_warnings': True,
                 'cookiesfrombrowser': self.cookie_browsers,
-                'nopart':True,
+                # 'live_from_start': True, # Not work with format best
+                # 'format': 'best', # 优先下载视频
             }
+
             if self.download_chat:
                 ydl_opts = {**ydl_opts, ** {'subtitleslangs': ['live_chat'],'writesubtitles': True,}}
+                logging.info(f"开始下载YouTube实时聊天: {self.url}")
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 self.process = ydl.download([self.url])
@@ -67,5 +69,20 @@ def check_youtube_live(url, cookie_browsers=['chrome']):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return info.get('is_live', False)
-    except:
+    except Exception as e:
+        logging.error(f"Error checking YouTube live status: {str(e)}")
         return False
+
+# def check_youtube_live(url, cookie_browsers=['chrome']):
+#     """检查YouTube直播状态"""
+#     try:
+#         ydl_opts = {
+#             'quiet': True,
+#             'no_warnings': True,
+#             'cookiesfrombrowser': cookie_browsers,
+#         }
+#         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+#             info = ydl.extract_info(url, download=False)
+#             return info.get('is_live', False)
+#     except:
+#         return False
