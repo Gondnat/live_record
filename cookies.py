@@ -23,7 +23,7 @@ import urllib.request
 from enum import Enum, auto
 import secretstorage
 
-from subprocess import Popen 
+from utils import Popen 
 
 
 from aes import (
@@ -131,7 +131,7 @@ def expand_path(s):
 def str_or_none(v, default=None):
     return default if v is None else str(v)
 
-class CookieLoadError():
+class CookieLoadError(Exception):
     pass
 
 
@@ -155,7 +155,7 @@ def load_cookies(cookie_file, browser_specification):
 
         return _merge_cookie_jars(cookie_jars)
     except Exception:
-        raise CookieLoadError('failed to load cookies')
+        raise CookieLoadError()
 
 
 def extract_cookies_from_browser(browser_name, profile=None, logger=logging, *, keyring=None, container=None):
@@ -221,7 +221,6 @@ def _extract_firefox_cookies(profile, container, logger):
                 cursor.execute('SELECT host, name, value, path, expiry, isSecure FROM moz_cookies')
             jar = YoutubeDLCookieJar()
             table = cursor.fetchall()
-            total_cookie_count = len(table)
             for i, (host, name, value, path, expiry, is_secure) in enumerate(table):
                 cookie = http.cookiejar.Cookie(
                     version=0, name=name, value=value, port=None, port_specified=False,
@@ -387,6 +386,8 @@ def _extract_chrome_cookies(browser_name, profile, keyring, logger):
                 logger.error(message)
                 raise DownloadError(message)  # force exit
             raise
+        except Exception as error:
+            logger.error(f'Failed to extract cookies from {browser_name}: {error_to_str(error)}')
         finally:
             if cursor is not None:
                 cursor.connection.close()
@@ -502,14 +503,14 @@ class LinuxChromeCookieDecryptor(ChromeCookieDecryptor):
         elif version == b'v11':
             self._cookie_counts['v11'] += 1
             if self._v11_key is None:
-                self._logger.warning('cannot decrypt v11 cookies: no key found', only_once=True)
+                self._logger.warning('cannot decrypt v11 cookies: no key found')
                 return None
             return _decrypt_aes_cbc_multi(
                 ciphertext, (self._v11_key, self._empty_key), self._logger,
                 hash_prefix=self._meta_version >= 24)
 
         else:
-            self._logger.warning(f'unknown cookie version: "{version}"', only_once=True)
+            self._logger.warning(f'unknown cookie version: "{version}"')
             self._cookie_counts['other'] += 1
             return None
 
@@ -535,7 +536,7 @@ class MacChromeCookieDecryptor(ChromeCookieDecryptor):
         if version == b'v10':
             self._cookie_counts['v10'] += 1
             if self._v10_key is None:
-                self._logger.warning('cannot decrypt v10 cookies: no key found', only_once=True)
+                self._logger.warning('cannot decrypt v10 cookies: no key found')
                 return None
 
             return _decrypt_aes_cbc_multi(
@@ -562,7 +563,7 @@ class WindowsChromeCookieDecryptor(ChromeCookieDecryptor):
         if version == b'v10':
             self._cookie_counts['v10'] += 1
             if self._v10_key is None:
-                self._logger.warning('cannot decrypt v10 cookies: no key found', only_once=True)
+                self._logger.warning('cannot decrypt v10 cookies: no key found')
                 return None
 
             # https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/os_crypt/sync/os_crypt_win.cc
@@ -727,7 +728,7 @@ def _parse_safari_cookies_record(data, jar, logger):
         p.skip_to(value_offset)
         value = p.read_cstring()
     except UnicodeDecodeError:
-        logger.warning('failed to parse Safari cookie because UTF-8 decoding failed', only_once=True)
+        logger.warning('failed to parse Safari cookie because UTF-8 decoding failed')
         return record_size
 
     p.skip_to(record_size, 'space at the end of the record')
@@ -1072,7 +1073,7 @@ def _decrypt_aes_cbc_multi(ciphertext, keys, logger, initialization_vector=b' ' 
             return plaintext.decode()
         except UnicodeDecodeError:
             pass
-    logger.warning('failed to decrypt cookie (AES-CBC) because UTF-8 decoding failed. Possibly the key is wrong?', only_once=True)
+    logger.warning('failed to decrypt cookie (AES-CBC) because UTF-8 decoding failed. Possibly the key is wrong?')
     return None
 
 
@@ -1080,7 +1081,7 @@ def _decrypt_aes_gcm(ciphertext, key, nonce, authentication_tag, logger, hash_pr
     try:
         plaintext = aes_gcm_decrypt_and_verify_bytes(ciphertext, key, authentication_tag, nonce)
     except ValueError:
-        logger.warning('failed to decrypt cookie (AES-GCM) because the MAC check failed. Possibly the key is wrong?', only_once=True)
+        logger.warning('failed to decrypt cookie (AES-GCM) because the MAC check failed. Possibly the key is wrong?')
         return None
 
     try:
@@ -1088,7 +1089,7 @@ def _decrypt_aes_gcm(ciphertext, key, nonce, authentication_tag, logger, hash_pr
             return plaintext[32:].decode()
         return plaintext.decode()
     except UnicodeDecodeError:
-        logger.warning('failed to decrypt cookie (AES-GCM) because UTF-8 decoding failed. Possibly the key is wrong?', only_once=True)
+        logger.warning('failed to decrypt cookie (AES-GCM) because UTF-8 decoding failed. Possibly the key is wrong?')
         return None
 
 

@@ -3,7 +3,7 @@ from pathlib import Path
 import threading
 import yt_dlp
 
-class YoutubeRecorderThread(threading.Thread):
+class VideoRecorderThread(threading.Thread):
     def __init__(self, url, filename, download_chat=False, cookie_browsers=['chrome']) :
         super().__init__()
         self.url = url
@@ -58,7 +58,7 @@ class YoutubeRecorderThread(threading.Thread):
                     pass
 
 
-def check_youtube_live(url, cookie_browsers=['chrome']):
+def check_livestream(url, cookie_browsers=['chrome']):
     """检查YouTube直播状态"""
     try:
         ydl_opts = {

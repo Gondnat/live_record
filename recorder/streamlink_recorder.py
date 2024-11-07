@@ -4,21 +4,19 @@ import threading
 import streamlink
 import streamlink.session
 
-def check_twitch_live(url, cookie = None):
+def check_livestream(url, cookie = None):
     """检查Twitch直播状态"""
     try:
+        streamlinklocal = streamlink.session.Streamlink()
         if cookie:
-            streamlinklocal = streamlink.session.Streamlink()
             streamlinklocal.set_option('http-cookies', cookie)
-            streams = streamlinklocal.streams(url)
-        else:
-            streams = streamlink.streams(url)
+        streams = streamlinklocal.streams(url)
         return len(streams) > 0
     except Exception as e:
         logging.error(f"检查直播状态失败: {str(e)}")
         return False
 
-class TwitchRecorderThread(threading.Thread):
+class VideoRecorderThread(threading.Thread):
     def __init__(self, url, filename, cookie = None, quality='best'):
         super().__init__()
         self.url = url

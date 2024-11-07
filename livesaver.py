@@ -1,5 +1,4 @@
 import random
-import streamlink
 import time
 import logging
 import json
@@ -8,10 +7,8 @@ from datetime import datetime
 from chat_downloader import ChatDownloader
 from pathlib import Path
 
-import streamlink.stream
 from cookies import load_cookies
-from recorder.youtube import YoutubeRecorderThread, check_youtube_live
-from recorder.twitch import TwitchRecorderThread, check_twitch_live
+from recorder.streamlink_recorder import VideoRecorderThread, check_livestream
 
 # 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -59,7 +56,7 @@ class ChatDownloaderThread(threading.Thread):
             
             chat = self.chat_downloader.get_chat(self.url)
             logging.info(f"开始下载聊天记录到 {self.filename}")
-            with open(self.filename, 'w', encoding='utf-8') as f:
+            with open(self.filename, 'a', encoding='utf-8') as f:
                 for message in chat:
                     if self.stopped():
                         self.chat_downloader.close()
@@ -84,34 +81,38 @@ def main():
     youtube_chat_thread = None
     twitch_chat_thread = None
     
-    output_dir = Path(f"recordings"/{datetime.now().strftime("%Y%m%d")})
+    output_dir = Path("recordings") / datetime.now().strftime("%Y%m%d")
     output_dir.mkdir(exist_ok=True)
-    cookies = load_cookies(None, ['safari'])
-    youtube_cookies_dict = cookies.get_cookies_dict_for_url(YOUTUBE_URL)
-    if not youtube_cookies_dict:
-        logging.error("请先登录YouTube")
-        return
     youtube_cookies_file = 'youtube_cookies.txt'
-    cookies.save(youtube_cookies_file)
-
+    youtube_cookies_dict = None
+    def _load_cookies():
+        nonlocal youtube_cookies_dict
+        cookies = load_cookies(None, ['chrome'])
+        cookies.save(youtube_cookies_file)
+        youtube_cookies_dict = cookies.get_cookies_dict_for_url(YOUTUBE_URL)
+        if not youtube_cookies_dict:
+            logging.error("请先登录YouTube")
+            exit(1)
+    _load_cookies()
     try:
         while True:
             try:
-                                
-                twitch_live = check_twitch_live(TWITCH_URL)
-                youtube_live = check_twitch_live(YOUTUBE_URL, youtube_cookies_dict)
+                if twitch_video_thread is None or not twitch_video_thread.is_alive():
+                    is_twitch_live = check_livestream(TWITCH_URL)
+                if not is_twitch_live and youtube_video_thread is None or not youtube_video_thread.is_alive():
+                    is_youtube_live = check_livestream(YOUTUBE_URL, youtube_cookies_dict)
                 
                 # Twitch开播时
-                if twitch_live and not twitch_video_thread:
+                if is_twitch_live and not twitch_video_thread:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     video_filename = output_dir / f"twitch_{timestamp}.ts"
                     chat_filename = output_dir / f"twitch_{timestamp}.json"
-                    
-                    logging.info("Twitch开播，开始录制视频和聊天")
-                    twitch_video_thread = TwitchRecorderThread(TWITCH_URL, str(video_filename))
-                    twitch_video_thread.start()
-                    twitch_chat_thread = ChatDownloaderThread(TWITCH_URL, str(chat_filename))
-                    twitch_chat_thread.start()
+                    if twitch_video_thread is None or not twitch_video_thread.is_alive():
+                        twitch_video_thread = VideoRecorderThread(TWITCH_URL, str(video_filename))
+                        twitch_video_thread.start()
+                    if twitch_chat_thread is None or not twitch_chat_thread.is_alive():
+                        twitch_chat_thread = ChatDownloaderThread(TWITCH_URL, str(chat_filename))
+                        twitch_chat_thread.start()
                     
                     # 如果YouTube在录制，则停止
                     if youtube_video_thread:
@@ -125,43 +126,26 @@ def main():
                         logging.info("停止YouTube录制和聊天下载")
                 
                 # YouTube开播且Twitch未开播时
-                elif youtube_live and not youtube_video_thread and not twitch_live:
+                elif is_youtube_live and not is_twitch_live:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     video_filename = output_dir / f"youtube_{timestamp}.ts"
                     chat_filename = output_dir / f"youtube_{timestamp}.json"
-                    
-                    logging.info("YouTube开播，开始录制视频和聊天")
-                    youtube_video_thread = TwitchRecorderThread(YOUTUBE_URL, str(video_filename), youtube_cookies_dict)
-                    youtube_video_thread.start()
-                    youtube_chat_thread = ChatDownloaderThread(YOUTUBE_URL, str(chat_filename), youtube_cookies_file)
-                    youtube_chat_thread.start()
-                
-                # Twitch关播时
-                elif not twitch_live and twitch_video_thread:
-                    twitch_video_thread.stop()
-                    twitch_video_thread.join(timeout=5)
-                    twitch_video_thread = None
-                    if twitch_chat_thread:
-                        twitch_chat_thread.stop()
-                        twitch_chat_thread.join(timeout=5)
-                        twitch_chat_thread = None
-                    logging.info("Twitch关播，停止录制和聊天下载")
-                
-                # YouTube关播时
-                elif not youtube_live and youtube_video_thread:
-                    youtube_video_thread.stop()
-                    youtube_video_thread.join(timeout=5)
-                    youtube_video_thread = None
-                    if youtube_chat_thread:
-                        youtube_chat_thread.stop()
-                        youtube_chat_thread.join(timeout=5)
-                        youtube_chat_thread = None
-                    logging.info("YouTube关播，停止录制和聊天下载")
+                    if youtube_video_thread is None or not youtube_video_thread.is_alive():
+                        youtube_video_thread = VideoRecorderThread(YOUTUBE_URL, str(video_filename), youtube_cookies_dict)
+                        youtube_video_thread.start()
+                    if youtube_chat_thread is None or not youtube_chat_thread.is_alive():
+                        youtube_chat_thread = ChatDownloaderThread(YOUTUBE_URL, str(chat_filename), youtube_cookies_file)
+                        youtube_chat_thread.start()
                 
             except Exception as e:
                 logging.error(f"发生错误: {str(e)}")
-                
-            time.sleep(random.randint(7,17))
+            
+            if is_youtube_live and not youtube_video_thread.is_alive():
+                # 如果YouTube直播结束，重新加载cookies
+                _load_cookies()
+            if not is_twitch_live and not is_youtube_live:
+                # delay 1~7 second to check status, while recording
+                time.sleep(random.randint(1,7))
     except KeyboardInterrupt:
         logging.info("收到退出信号，正在清理...")
     finally:
