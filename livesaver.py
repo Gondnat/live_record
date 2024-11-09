@@ -143,9 +143,8 @@ def main():
             if is_youtube_live and not youtube_video_thread.is_alive():
                 # 如果YouTube直播结束，重新加载cookies
                 _load_cookies()
-            if not is_twitch_live and not is_youtube_live:
-                # delay 1~7 second to check status, while recording
-                time.sleep(random.randint(1,7))
+            # delay 1~7 second to check status
+            time.sleep(random.randint(1,7))
     except KeyboardInterrupt:
         logging.info("收到退出信号，正在清理...")
     finally:

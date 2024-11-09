@@ -13,7 +13,7 @@ def check_livestream(url, cookie = None):
         streams = streamlinklocal.streams(url)
         return len(streams) > 0
     except Exception as e:
-        logging.error(f"检查直播状态失败: {str(e)}")
+        logging.error(f"检查{url} 直播状态失败: {str(e)}")
         return False
 
 class VideoRecorderThread(threading.Thread):
