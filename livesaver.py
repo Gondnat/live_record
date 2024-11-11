@@ -12,7 +12,7 @@ from cookies import convert_cookie_list_to_cookiejar, load_cookies
 from recorder.streamlink_recorder import VideoRecorderThread, check_livestream
 
 # 设置日志
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 直播地址
 TWITCH_URL = "https://www.twitch.tv/luoshushu0"
@@ -128,6 +128,8 @@ def main():
 
     _load_cookies()
 
+    is_youtube_live = False
+    is_twitch_live = False
     try:
         while True:
             try:
@@ -176,7 +178,7 @@ def main():
             except Exception as e:
                 logging.error(f"发生错误: {str(e)}")
             
-            if is_youtube_live and not youtube_video_thread.is_alive():
+            if is_youtube_live and (not youtube_chat_thread or not youtube_video_thread.is_alive()):
                 # 如果YouTube直播结束，重新加载cookies
                 _load_cookies()
             # delay 1~7 second to check status
