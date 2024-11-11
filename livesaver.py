@@ -141,7 +141,7 @@ def main():
                     is_youtube_live = check_livestream(YOUTUBE_URL, youtube_cookies_dict)
                 
                 # Twitch开播时
-                if is_twitch_live and not twitch_video_thread:
+                if is_twitch_live and (not twitch_video_thread or not twitch_video_thread.is_alive()):
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     video_filename = output_dir / f"twitch_{timestamp}.ts"
                     chat_filename = output_dir / f"twitch_{timestamp}.json"
