@@ -134,6 +134,20 @@ def str_or_none(v, default=None):
 class CookieLoadError(Exception):
     pass
 
+def convert_cookie_list_to_cookiejar(cookie_list):
+    """
+    Convert a list of http.cookiejar.Cookie objects to an http.cookiejar.CookieJar object.
+    
+    Args:
+        cookie_list (list): List of http.cookiejar.Cookie objects.
+    
+    Returns:
+        http.cookiejar.CookieJar: CookieJar object containing the cookies.
+    """
+    cookie_jar = YoutubeDLCookieJar()
+    for cookie in cookie_list:
+        cookie_jar.set_cookie(cookie)
+    return cookie_jar
 
 def load_cookies(cookie_file, browser_specification):
     try:
