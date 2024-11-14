@@ -116,15 +116,22 @@ def main():
 
     def _load_cookies():
         nonlocal youtube_cookies_dict
+        # Load cookies only if not specified to use no cookies
         if not args.no_cookies:
+            # If only local file is to be used, load from that file without updating
             if args.cookies_file_only:
                 logging.info(f"只从文件 {youtube_cookies_file} 加载cookies")
-                array_cookies = load_cookies(youtube_cookies_file, None).get_cookies_for_url(YOUTUBE_URL)
+                cookies = load_cookies(youtube_cookies_file, None)
             else:
-                array_cookies = load_cookies(None, ['chrome']).get_cookies_for_url(YOUTUBE_URL)
-                # update cookies file
-                convert_cookie_list_to_cookiejar(array_cookies).save(youtube_cookies_file)
+                # Load cookies from browser and update the file with them
+                cookies = load_cookies(None, ['chrome'])
+                # Update cookies file
+                cookies.save(youtube_cookies_file)
+            # Get cookies specific to YouTube URL
+            array_cookies = cookies.get_cookies_for_url(YOUTUBE_URL)
+            # Convert cookie list to dictionary for easier usage in ChatDownloaderThread
             youtube_cookies_dict = {cookie.name: cookie.value for cookie in array_cookies }
+            # If no cookies were found, prompt the user to log into YouTube
             if not youtube_cookies_dict:
                 logging.error("请先登录YouTube")
                 exit(1)
