@@ -11,9 +11,6 @@ import argparse
 from cookies import convert_cookie_list_to_cookiejar, load_cookies
 from recorder.streamlink_recorder import VideoRecorderThread, check_livestream
 
-# 设置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # 直播地址
 TWITCH_URL = "https://www.twitch.tv/luoshushu0"
 YOUTUBE_URL = "https://www.youtube.com/channel/UC7QVieoTCNwwW84G0bddXpA/live"
@@ -91,12 +88,18 @@ def main():
     parser.add_argument('-l', '--local-cookies', type=str, default='youtube_cookies.txt', dest='cookies_file', help="Special YouTube cookies file path.")
     parser.add_argument('--cookies-file-only', action='store_true', help="Only load cookies from the specified local file.")
     parser.add_argument('--debug', action='store_true', help="Set logging level to DEBUG.")
+    parser.add_argument( '--quiet', action='store_true', help="Set logging level to CRITICAL.")
     args = parser.parse_args()
 
+    log_level = logging.INFO
     # Set logging level to DEBUG if --debug is specified
     if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-
+        log_level = logging.DEBUG
+    if args.quiet:
+        log_level = logging.CRITICAL
+    # 设置日志
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     youtube_video_thread = None
     twitch_video_thread = None
     youtube_chat_thread = None
@@ -118,7 +121,7 @@ def main():
                 logging.info(f"只从文件 {youtube_cookies_file} 加载cookies")
                 array_cookies = load_cookies(youtube_cookies_file, None).get_cookies_for_url(YOUTUBE_URL)
             else:
-                array_cookies = load_cookies(youtube_cookies_file, ['chrome']).get_cookies_for_url(YOUTUBE_URL)
+                array_cookies = load_cookies(None, ['chrome']).get_cookies_for_url(YOUTUBE_URL)
                 # update cookies file
                 convert_cookie_list_to_cookiejar(array_cookies).save(youtube_cookies_file)
             youtube_cookies_dict = {cookie.name: cookie.value for cookie in array_cookies }
@@ -194,5 +197,4 @@ def main():
                 thread.join(timeout=5)
 
 if __name__ == "__main__":
-    logging.info("开始监控直播状态")
     main()

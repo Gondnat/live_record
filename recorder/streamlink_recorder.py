@@ -46,9 +46,9 @@ class VideoRecorderThread(threading.Thread):
     def run(self):
         try:
             if self.cookie:
-                streamlinklocal = streamlink.session.Streamlink()
-                streamlinklocal.set_option('http-cookies', self.cookie)
-                streams = streamlinklocal.streams(self.url)
+                streamlink_session = streamlink.session.Streamlink()
+                streamlink_session.set_option('http-cookies', self.cookie)
+                streams = streamlink_session.streams(self.url)
             else:
                 streams = streamlink.streams(self.url)
             if not streams:
